@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  revokedAt        DateTime?
+
+  @@map("sessions")
+}
+
+model ManifestVersion {
+  id             String          @id @default(cuid())
+  channel        String
+  version        String
+  build          Int
+  filesJson      String
+  createdAt      DateTime        @default(now())
+  clientVersions ClientVersion[]
+
+  @@unique([channel, version, build])
+  @@map("manifest_versions")
+}
+
+model ClientVersion {
+  id          String          @id @default(cuid())
+  version     String
+  channel     String
+  build       Int
+  publishedAt DateTime        @default(now())
+  manifestId  String
+  manifest    ManifestVersion @relation(fields: [manifestId], references: [id])
+
+  @@unique([channel, version, build])
+  @@map("client_versions")
+}
+
+model LauncherVersion {
+  id          String   @id @default(cuid())
+  version     String
+  channel     String
+  build       Int
+  downloadUrl String
+  sha256      String
+  publishedAt DateTime @default(now())
+
+  @@unique([channel, version, build])
+  @@map("launcher_versions")
+}
+
+model ServerStatus {
+  id         String   @id @default(cuid())
+  online     Boolean
+  players    Int
+  maxPlayers Int
+  version    String
+  updatedAt  DateTime @updatedAt
+
+  @@map("server_status")
+}
