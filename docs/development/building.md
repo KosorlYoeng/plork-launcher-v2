@@ -54,6 +54,14 @@ Files land under `backend/storage/<channel>/` (gitignored;
 override the root with `STORAGE_ROOT`, an absolute path) and are served at
 `GET /api/v1/client/files/:channel/*`.
 
+To publish a real launcher build (BE-008 — see below for how to produce
+one) once it's hosted somewhere (a release page/CDN — this backend doesn't
+host launcher installers itself, only client build files):
+
+```sh
+npm run publish-launcher -- --file <installerOrZip> --channel stable --version 1.0.0 --build 1 --download-url <whereItsHosted>
+```
+
 ## Manifest generator (`tools/manifest/`)
 
 ```sh
@@ -97,6 +105,25 @@ binary invocation into plain-Node mode and silently skips the whole app
 bootstrap. Unset it before manually launching the built app outside `npm
 run dev`/`electron-vite preview` (which handle this correctly themselves).
 
+## Packaging (`launcher/`, LN-010)
+
+```sh
+cd launcher
+npm run package               # electron-vite build + electron-builder, default target(s) for this host
+npx electron-builder --mac                # dmg + zip
+npx electron-builder --win zip --x64      # portable zip, no installer exe
+npx electron-builder --win nsis --x64     # installer .exe — see ADR-013: builds fine here, but
+                                           # can't be launch-tested (no Windows/Wine runtime on this machine)
+```
+
+Output lands in `launcher/release/` (gitignored, ~1.7GB across every
+target — safe to delete, `npm run package` reproduces it). No code signing
+happens unless `CSC_LINK`/`CSC_KEY_PASSWORD` (electron-builder's standard
+env vars) point at a real certificate — neither is set here, so builds are
+genuinely unsigned. `electron` in `launcher/package.json` must stay pinned
+to an *exact* version (not a `^range`) — electron-builder needs to resolve
+exactly which prebuilt Electron binary to bundle.
+
 ## Run everything
 
 ```sh
@@ -108,5 +135,5 @@ npm test                     # from repo root: runs all three packages' test sui
 - `client/`, `server/` (CitizenFX integration) — blocked on a decision about
   how upstream CitizenFX source enters this workspace (see
   `docs/architecture/repository-audit.md`).
-- Real file hosting for `launcher/`'s update downloads — see `docs/plan.md`
-  task `BE-007`.
+- Real code-signed Windows/macOS releases — no certificate available (see
+  ADR-013). Unsigned builds work; a real release needs a real cert.

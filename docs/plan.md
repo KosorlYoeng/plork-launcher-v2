@@ -80,11 +80,24 @@ which does not exist in this workspace yet.
 
 ---
 
-## Phase 4+ — Security hardening, CI/CD, packaging, full test matrix
+## Phase 4a — Packaging & release
 
-Deferred until Phases 1–3 have working, tested implementations — see plan
-§7 (Production security), §21 (CI/CD), §22 (Testing), §23 Phase 7–9. Will be
-broken into tasks here once Phase 1–2 land.
+Goal: a real, launchable packaged app and a real launcher-version hash —
+plan §20 (build/package commands), §23 Phase 9 (release pipeline). Does
+not include CI/CD automation or real code signing (no certificate
+available).
+
+| ID | Title | Description | Files/components | Deps | Status | Testing requirements |
+|----|-------|-------------|-------------------|------|--------|----------------------|
+| LN-010 | Packaging config | `electron-builder` config (mac: dmg+zip, win: nsis+zip); `npm run package` | `launcher/electron-builder.yml` | LN-000 | DONE — see ADR-013 | Real mac `.dmg`/`.zip` built and the packaged `.app` launched (not dev build) via a Playwright driver, logged in against the real backend; win `zip` and `nsis` `.exe` both built successfully (structurally verified via `file`; not launch-tested — no Windows/Wine runtime here to execute them) |
+| BE-008 | Publish launcher version | Hash a built installer/archive and upsert a real `LauncherVersion` row (`downloadUrl` supplied by caller — installer hosting is a separate decision from BE-007's client-file storage) | `backend/src/services/publishLauncher.ts`, `backend/src/publish-launcher-cli.ts` | BE-007 | DONE | Unit tests: hash matches a real `shasum -a 256`, idempotent republish; manual run against the real packaged `.dmg` — hash matched `shasum` exactly, `GET /api/v1/launcher/latest` served it live |
+
+---
+
+## Phase 4+ — Security hardening, CI/CD, full test matrix
+
+Deferred — see plan §7 (Production security), §21 (CI/CD), §22 (Testing).
+Will be broken into tasks here if/when picked next.
 
 ---
 
@@ -115,10 +128,25 @@ broken into tasks here once Phase 1–2 land.
   see [ADR-012](architecture/decisions.md#adr-012-be-007-verification-pass--2-real-regressions-4-hardening-fixes).
   78 tests total across the repo (`npm test` from root), re-verified live
   against the real running backend + launcher.
+- Phase 4a (packaging & release) is now done — see
+  [ADR-013](architecture/decisions.md#adr-013-packaging--release-electron-builder-and-a-correction-to-my-own-earlier-prediction).
+  Includes a correction: I initially told the user the Windows NSIS
+  installer couldn't be built on this machine (no wine) — that was wrong
+  for the electron-builder version in use; it built successfully when
+  actually tried. 81 tests total across the repo, a real packaged macOS
+  app built and launch-verified, real Windows `zip`/`nsis` artifacts built
+  (structurally verified, not launch-tested — no Windows/Wine runtime here
+  to run them), and a real installer hash now served by
+  `/api/v1/launcher/latest`, replacing the fake seeded one.
+- A follow-up verification pass on that same Phase 4a diff (before
+  committing) found and fixed a real packaging bloat bug (~21MB of
+  Vite-inlined-but-still-bundled `vue`/`pinia`/`vue-router` shipped in
+  every installer) plus 3 smaller correctness fixes — see
+  [ADR-014](architecture/decisions.md#adr-014-publish-launcher-verification-pass--4-fixes).
+  85 tests total across the repo.
 - Next actionable work is Phase 3 (`CL-000`), still blocked on a user
-  decision about CitizenFX source — that decision has been deferred twice
-  now (see prior Notes entries and the "Not ready" answer in the Phase 3
-  planning discussion). No other non-blocked backend/launcher gaps remain
-  in `docs/plan.md`; further work here is either Phase 3, or Phase 4+
-  items (production security hardening, CI/CD, packaging — plan §7, §21,
-  §23 Phase 7–9) not yet broken into tasks.
+  decision about CitizenFX source — deferred twice now (see prior Notes
+  entries). No other non-blocked backend/launcher gaps remain in
+  `docs/plan.md`; further work here is either Phase 3, or the remaining
+  Phase 4+ items (production security hardening, CI/CD — plan §7, §21) not
+  yet broken into tasks.

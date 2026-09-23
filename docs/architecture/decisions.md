@@ -4,6 +4,120 @@ ADR-style log per plan §24. Newest first.
 
 ---
 
+## ADR-014: publish-launcher verification pass — 4 fixes
+
+**Context**: independent code review of `publishLauncherVersion`/
+`publish-launcher-cli.ts`/the electron-builder packaging config, run
+before committing Phase 4a — this diff hadn't been through a review pass
+yet (only manual testing).
+
+**Fixed**:
+1. `LauncherVersion.publishedAt` was only set on `create`, not `update` —
+   republishing the same channel/version/build with a fixed/updated file
+   silently kept the *original* publish timestamp. Now explicitly set on
+   both branches of the upsert. Verified live: republishing the packaged
+   `.dmg` after the fix below (different bytes, same identity) produced a
+   visibly later `publishedAt` from the real running backend.
+2. **Real, measurable packaging bloat**: `vue`, `vue-router`, and `pinia`
+   were listed under `launcher/package.json`'s `"dependencies"`, so
+   electron-builder faithfully bundled all three (plus their transitive
+   deps) into every packaged installer's `node_modules` — dead weight,
+   since Vite already inlines them into the renderer's single JS bundle at
+   build time, and neither the main nor preload process ever
+   `require()`s them (confirmed by grep before the fix, and by listing the
+   `app.asar` contents after). Moved to `devDependencies` — the correct
+   classification for a Vite-bundled renderer-only library — leaving only
+   `@mzzplork/manifest` in `dependencies`, since that one genuinely is
+   `require()`'d by `UpdateManager.ts` at runtime. Rebuilt and repackaged:
+   `app.asar` dropped from including the whole vue/pinia dependency graph
+   to 333KB (its own bundled app code only); the `.dmg` shrank by ~4MB.
+   Re-verified the packaged app still launches and logs in after the
+   change (a dependency reclassification is exactly the kind of change
+   that could silently break packaging).
+3. `publishLauncherVersion` passed a possibly-relative `--file` path
+   straight to `hashFile` (whose other caller,
+   `tools/manifest/src/generate.ts`, always passes an absolute path).
+   Worked today only because it happened to run from a predictable cwd;
+   now resolved explicitly.
+4. Added `downloadUrl` validation (must parse as a URL, must be http/https)
+   before hashing or writing to the database — a typo'd URL used to
+   persist silently and only surface when something later tried to fetch
+   it.
+
+**Not fixed (considered, rejected)**: further de-duplicating
+`publish-launcher-cli.ts` against `publish-cli.ts` beyond the
+already-shared `parseFlags`/`requireFlag`/`parseIntFlag`. What's left
+differing is each script's own ~10-line `main()` wrapper — normal
+CLI-entrypoint shape, not the kind of duplicated *logic* worth forcing
+into a shared abstraction for.
+
+**Consequences**: `publishLauncher.test.ts` grew from 3 to 7 tests
+(publishedAt-refresh, relative-path resolution, two malformed-URL cases).
+85 tests total across the repo.
+
+---
+
+## ADR-013: Packaging & release — electron-builder, and a correction to my own earlier prediction
+
+**Context**: first Phase 4+ task after `docs/plan.md` had no non-blocked
+backend/launcher gaps left. `LauncherVersion` (`downloadUrl`, `sha256`)
+had only ever held fake seed data — no real installer, no real hash.
+
+**Chosen approach**: `electron-builder` (the standard, effectively only,
+tool for packaging Electron apps — pairs with electron-vite by
+convention). Config in `launcher/electron-builder.yml`: `mac: [dmg, zip]`,
+`win: [nsis, zip]`. No code signing configured beyond electron-builder's
+own default (reads `CSC_LINK`/`CSC_KEY_PASSWORD` if set — neither is,
+here, so builds are genuinely unsigned, not fake-signed). No custom app
+icon — Electron's default is used, since inventing a logo isn't a call
+for me to make; documented as a real placeholder to replace before a
+production release.
+
+**A correction, found by actually trying it rather than trusting my own
+research**: before implementing, I told the user the Windows NSIS
+installer specifically "cannot be built on this machine" because NSIS
+installer generation needs `wine`, which isn't installed here. That
+research was based on how electron-builder used to work. It was wrong for
+the version actually in use (26.15.3) — I ran `electron-builder --win nsis
+--x64` anyway (the plan's own step 4 said to attempt it and report the
+real outcome, not assume), and it built a genuine, working NSIS installer
+(`file` confirms: "PE32 executable (GUI)... Nullsoft Installer
+self-extracting archive") with no wine involved. Whatever changed
+(electron-builder bundling a portable NSIS toolchain now, most likely),
+the actual behavior beat my prediction. Correcting the record here rather
+than quietly updating the plan and moving on — the earlier "verify what's
+actually verifiable, document what isn't" framing was right in spirit,
+just wrong on which bucket this fell into.
+
+**What's still real but distinct**: I *built* the Windows artifacts (nsis
+`.exe`, `zip`) successfully, but this machine has no Windows/Wine runtime
+to *execute* an x86 Windows binary, so unlike the macOS target (built,
+launched, driven through a real login), the Windows artifacts are
+structurally verified (`file`, archive contents) but not launch-tested —
+that gap is real and worth naming, not glossed over.
+
+**Verified for real**:
+- macOS: `npm run package` → `release/MzzPlork-0.1.0-arm64.dmg` +
+  `-mac.zip`. Launched the actual packaged `.app` (not the dev build,
+  confirmed by its `file://.../app.asar/...` window URL) via the same
+  Playwright driver pattern from Phase 2/BE-007, logged in against the
+  real backend, reached an authenticated Home screen.
+- Windows: `--win zip --x64` and `--win nsis --x64` both produced real
+  artifacts (`MzzPlork-0.1.0-win.zip`, `MzzPlork Setup 0.1.0.exe`).
+- `publish-launcher-cli` run against the real `.dmg`: computed
+  `78a2db...f441`, matched `shasum -a 256` on the same file exactly, and
+  `GET /api/v1/launcher/latest?channel=stable` on the live backend now
+  serves that real hash — replacing the fake seeded one for the first
+  time since Phase 1.
+
+**Consequences**: `backend/src/services/publishLauncher.ts` reuses
+`hashFile` from `@mzzplork/manifest` rather than reimplementing SHA-256 —
+same instinct as BE-007's shared `resolveSafePath`/`mapWithConcurrencyLimit`.
+`launcher/release/` is real build output (~1.7GB across all targets,
+gitignored) — safe to delete, reproducible via `npm run package`.
+
+---
+
 ## ADR-012: BE-007 verification pass — 2 real regressions, 4 hardening fixes
 
 **Context**: independent code review (`/code-review --level high`, 3

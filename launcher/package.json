@@ -2,6 +2,8 @@
   "name": "@mzzplork/launcher",
   "private": true,
   "version": "0.1.0",
+  "description": "MzzPlork launcher — detects GTA V, keeps the MzzPlork client up to date, and connects to the MzzPlork RP server.",
+  "author": "MzzPlork",
   "type": "module",
   "main": "./out/main/index.cjs",
   "scripts": {
@@ -9,23 +11,25 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "test": "vitest run",
-    "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json"
+    "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "package": "electron-vite build && electron-builder"
   },
   "dependencies": {
-    "@mzzplork/manifest": "*",
-    "pinia": "^4.0.3",
-    "vue": "^3.5.43",
-    "vue-router": "^5.3.1"
+    "@mzzplork/manifest": "*"
   },
   "devDependencies": {
     "@mzzplork/backend": "*",
     "@types/node": "^22.9.0",
     "@vitejs/plugin-vue": "^6.0.9",
-    "electron": "^44.4.5",
+    "electron": "44.4.5",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "pinia": "^4.0.3",
     "typescript": "^5.6.3",
     "vite": "^7.3.6",
     "vitest": "^2.1.4",
+    "vue": "^3.5.43",
+    "vue-router": "^5.3.1",
     "vue-tsc": "^3.1.3"
   }
 }

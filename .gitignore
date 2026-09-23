@@ -6,3 +6,5 @@ dist/
 backend/prisma/dev.db
 backend/prisma/dev.db-journal
 backend/storage/
+launcher/release/
+launcher/out/

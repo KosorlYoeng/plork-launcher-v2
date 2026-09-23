@@ -13,7 +13,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts",
-    "publish-build": "tsx src/publish-cli.ts"
+    "publish-build": "tsx src/publish-cli.ts",
+    "publish-launcher": "tsx src/publish-launcher-cli.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
