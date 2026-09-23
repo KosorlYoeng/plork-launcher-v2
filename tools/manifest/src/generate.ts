@@ -15,7 +15,7 @@ export interface GenerateManifestOptions {
   build: number;
 }
 
-async function hashFile(absPath: string): Promise<string> {
+export async function hashFile(absPath: string): Promise<string> {
   const hash = createHash("sha256");
   await new Promise<void>((resolve, reject) => {
     const stream = createReadStream(absPath);

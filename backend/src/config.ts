@@ -18,7 +18,10 @@ function requireEnvStrictInProduction(name: string, devFallback: string): string
 export const config = {
   env: process.env.NODE_ENV ?? "development",
   port: Number.parseInt(process.env.PORT ?? "3000", 10),
-  databaseUrl: requireEnvStrictInProduction("DATABASE_URL", "file:./prisma/dev.db"),
+  // Note: Prisma resolves a relative sqlite URL relative to schema.prisma's
+  // own directory (backend/prisma/), not the backend/ root — "file:./dev.db"
+  // here means backend/prisma/dev.db, not backend/dev.db.
+  databaseUrl: requireEnvStrictInProduction("DATABASE_URL", "file:./dev.db"),
   jwtSecret: requireEnvStrictInProduction("JWT_SECRET", "dev-only-insecure-secret"),
   accessTokenTtlSeconds: Number.parseInt(
     process.env.ACCESS_TOKEN_TTL_SECONDS ?? String(15 * 60),

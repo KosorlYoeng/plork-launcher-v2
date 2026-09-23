@@ -52,16 +52,17 @@ backend. Does not yet start a real game client (that needs Phase 4).
 
 | ID | Title | Description | Files/components | Deps | Status | Testing requirements |
 |----|-------|-------------|-------------------|------|--------|----------------------|
-| LN-000 | Launcher project scaffold | Electron main + Vue renderer, per plan §6 target structure | `launcher/` | P0-02 | TODO | `npm run dev` opens a window |
-| LN-001 | Config model | `environment, apiBaseUrl, channel, gamePath, clientPath, autoUpdate` (plan §15), loaded from a config file, not hardcoded | `launcher/src/main/config.*` | LN-000 | TODO | Unit test: load/save/defaults |
-| LN-002 | GameDetector | Detect GTA V install (Steam/Epic/Rockstar registry & known paths), validate, persist selection, no single hardcoded path (plan §6) | `launcher/src/main/GameDetector.*` | LN-001 | TODO | Unit test against mocked filesystem/registry for each install type |
-| LN-003 | API client | Typed client for backend `/api/v1/*` | `launcher/src/main/ApiClient.*` | BE-002..BE-005 | TODO | Unit test with mocked HTTP |
-| LN-004 | Auth/Login UI + SecureStorage | Login screen, token storage (OS keychain / encrypted-at-rest, never plaintext) | `launcher/src/renderer/views/Login.vue`, `launcher/src/main/SecureStorage.*` | LN-003 | TODO | Test: login success/failure paths; tokens not persisted in plaintext |
-| LN-005 | UpdateManager | Fetch manifest, diff against local files by SHA-256, download only changed files, resume/retry, atomic `.tmp` → final replace (plan §9, §10) | `launcher/src/main/UpdateManager.*` | LN-003 | TODO | Unit test: unchanged files skipped; interrupted download resumes; corrupt download rejected and not applied |
-| LN-006 | ClientManager | Install/validate/prepare/start the MzzPlork client process | `launcher/src/main/ClientManager.*` | LN-005 | BLOCKED (needs Phase 4 client to actually start) | Test once client exists |
-| LN-007 | ProcessManager | Start/monitor/handle-exit for spawned processes | `launcher/src/main/ProcessManager.*` | LN-000 | TODO | Unit test with a dummy child process |
-| LN-008 | UI states | Splash, Home, Updating, Settings, Error views wired to the above | `launcher/src/renderer/views/*` | LN-002, LN-004, LN-005 | TODO | Manual run-through of each state |
-| LN-009 | Path traversal protection | Reject/normalize any manifest file path that escapes the client install dir (plan §18) | `launcher/src/main/UpdateManager.*` | LN-005 | TODO | Unit test: manifest with `../../x` path is rejected |
+| LN-000 | Launcher project scaffold | Electron main + Vue renderer, per plan §6 target structure — electron-vite + Vue 3 + Pinia + vue-router, see ADR-006/ADR-007 | `launcher/` | P0-02 | DONE | `npm run dev` / built app opens a real window (Playwright `_electron` driver, screenshotted) |
+| LN-001 | Config model | `environment, apiBaseUrl, channel, gamePath, clientPath, autoUpdate` (plan §15), loaded from a config file, not hardcoded | `launcher/src/main/config.ts` | LN-000 | DONE | Unit tests: defaults, persisted merge across reload |
+| LN-002 | GameDetector | Detect GTA V install (Steam/Epic/Rockstar registry & known paths), validate, persist selection, no single hardcoded path (plan §6) | `launcher/src/main/GameDetector.ts` | LN-001 | DONE | Unit tests against real temp-dir fixtures per strategy (Steam/Epic/Rockstar-default) + an injected fake registry reader for the Windows-only path |
+| LN-003 | API client | Typed client for backend `/api/v1/*` | `launcher/src/main/ApiClient.ts` | BE-002..BE-005 | DONE | Integration tests against the real Phase 1 backend (booted in-process on a real port, not mocked) |
+| LN-004 | Auth/Login UI + SecureStorage | Login screen, token storage (OS keychain / encrypted-at-rest, never plaintext) | `launcher/src/renderer/src/views/Login.vue`, `launcher/src/main/SecureStorage.ts` | LN-003 | DONE | Unit tests: round-trip, refuses plaintext fallback, corrupted-file handling; manual run confirmed real login flow end-to-end |
+| LN-005 | UpdateManager | Fetch manifest, diff against local files by SHA-256, download only changed files, resume/retry, atomic `.tmp` → final replace (plan §9, §10) | `launcher/src/main/UpdateManager.ts` | LN-003 | DONE | Unit tests against a real local HTTP test server: unchanged files skipped, resume-from-partial-tmp exercises a real `Range` request, corrupt download rejected and not applied |
+| LN-006 | ClientManager | Install/validate/prepare/start the MzzPlork client process | `launcher/src/main/ClientManager.ts` | LN-005 | BLOCKED (needs Phase 4 client to actually start) | Test once client exists |
+| LN-007 | ProcessManager | Start/monitor/handle-exit for spawned processes | `launcher/src/main/ProcessManager.ts` | LN-000 | DONE | Unit tests spawn real child processes (exit code, stdout/stderr, signal-killed) |
+| LN-008 | UI states | Splash, Home, Updating, Settings, Error views wired to the above | `launcher/src/renderer/src/views/*` | LN-002, LN-004, LN-005 | DONE | Manual run-through via a real launched Electron window (Playwright `_electron`): Splash→Login→Home→Settings (path validation)→Updating→Error→Retry, all screenshotted |
+| LN-009 | Path traversal protection | Reject/normalize any manifest file path that escapes the client install dir (plan §18) | `launcher/src/main/UpdateManager.ts` (`resolveSafeInstallPath`) | LN-005 | DONE | Unit tests: `../../x` and absolute paths rejected before any disk write or network call |
+| BE-007 | Client file storage/serving | Backend doesn't serve actual file bytes yet — only manifest metadata (path/size/sha256). `UpdateManager`'s downloader is generic (works against any base URL) but there's nothing real to point it at in production yet. | `backend/` (new) | BE-006 | TODO | New — see ADR-008 |
 
 ---
 
@@ -94,10 +95,17 @@ broken into tasks here once Phase 1–2 land.
 - `CL-*`/`SV-001`/`LN-006` are blocked on a decision only the user can make
   (where CitizenFX source comes from) — see
   [docs/architecture/repository-audit.md](architecture/repository-audit.md#potential-risks).
-- Next actionable work, pending user go-ahead, is Phase 2 (`LN-000`), since
-  it depends only on the now-complete Phase 1 backend, not on CitizenFX
-  source.
 - Phase 1 went through an explicit verification pass (independent code
   review + manual live-server re-testing, not just "tests pass") before
   Phase 2 started, which found and fixed 6 real bugs — see
   [ADR-005](architecture/decisions.md#adr-005-phase-1-verification-pass-found-and-fixed-6-real-bugs).
+- Phase 2 (launcher shell) is now done and independently verified the same
+  way: 39 new launcher tests (60 total across the repo — `npm test` from
+  root), a real electron-vite build, and a manual run of the actual
+  Electron app (login → home → settings → update-check → error → retry)
+  via a Playwright driver, screenshotted at each step. That pass also found
+  and fixed a real Electron/Node ESM interop bug — see
+  [ADR-009](architecture/decisions.md#adr-009-launcher-verification-pass-found-and-fixed-a-real-electronesm-bug-plus-a-missing-clientpath-wiring-gap).
+- Next actionable work, pending user go-ahead, is Phase 3 (`CL-000`,
+  blocked on a user decision about CitizenFX source) or `BE-007` (real file
+  storage/serving), since both are now the only non-blocked gaps left.
