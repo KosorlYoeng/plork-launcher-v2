@@ -318,19 +318,11 @@ class ApiClient {
     });
   }
 }
-class PathTraversalError extends Error {
-}
+const resolveSafeInstallPath = manifest.resolveSafePath;
 class DownloadVerificationError extends Error {
 }
-function resolveSafeInstallPath(installDir, relativePath) {
-  const resolvedRoot = node_path.resolve(installDir);
-  const resolvedTarget = node_path.resolve(resolvedRoot, relativePath);
-  if (resolvedTarget !== resolvedRoot && !resolvedTarget.startsWith(resolvedRoot + node_path.sep)) {
-    throw new PathTraversalError(
-      `Manifest file path escapes the install directory: "${relativePath}"`
-    );
-  }
-  return resolvedTarget;
+function encodeManifestPath(path) {
+  return path.split("/").map(encodeURIComponent).join("/");
 }
 async function compareLocalFiles(installDir, manifest$1) {
   const toDownload = [];
@@ -455,7 +447,7 @@ class UpdateManager {
       let filesCompleted = 0;
       for (const file of toDownload) {
         const destPath = resolveSafeInstallPath(this.options.installDir, file.path);
-        const url = `${this.options.baseDownloadUrl}/${channel}/${file.path}`;
+        const url = `${this.options.baseDownloadUrl}/${encodeURIComponent(channel)}/${encodeManifestPath(file.path)}`;
         onProgress?.({
           status: "downloading",
           file: file.path,
@@ -571,9 +563,10 @@ class LauncherState {
     if (!config.clientPath) {
       throw new Error("No client install path configured — detect or select a GTA V install first");
     }
+    const baseDownloadUrl = this.deps.baseDownloadUrlOverride ?? `${config.apiBaseUrl}/api/v1/client/files`;
     const updateManager = new UpdateManager(this.apiClient, {
       installDir: config.clientPath,
-      baseDownloadUrl: this.deps.baseDownloadUrl
+      baseDownloadUrl
     });
     return updateManager.update(config.channel, onProgress);
   }
@@ -648,7 +641,6 @@ function createDefaultGameDetectionStrategies() {
   ];
 }
 const { app, BrowserWindow, ipcMain, safeStorage } = electron;
-const DEFAULT_BASE_DOWNLOAD_URL = process.env.MZZPLORK_BASE_DOWNLOAD_URL ?? "https://cdn.mzzplork.example.com/client";
 async function createWindow() {
   const configStore = new ConfigStore(node_path.join(app.getPath("userData"), "config.json"));
   const config = await configStore.load();
@@ -662,7 +654,7 @@ async function createWindow() {
       configStore,
       secureStorage,
       gameDetector,
-      baseDownloadUrl: DEFAULT_BASE_DOWNLOAD_URL,
+      baseDownloadUrlOverride: process.env.MZZPLORK_BASE_DOWNLOAD_URL,
       defaultClientDir: node_path.join(app.getPath("userData"), "client")
     },
     config

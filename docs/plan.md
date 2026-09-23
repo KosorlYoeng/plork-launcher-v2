@@ -62,7 +62,7 @@ backend. Does not yet start a real game client (that needs Phase 4).
 | LN-007 | ProcessManager | Start/monitor/handle-exit for spawned processes | `launcher/src/main/ProcessManager.ts` | LN-000 | DONE | Unit tests spawn real child processes (exit code, stdout/stderr, signal-killed) |
 | LN-008 | UI states | Splash, Home, Updating, Settings, Error views wired to the above | `launcher/src/renderer/src/views/*` | LN-002, LN-004, LN-005 | DONE | Manual run-through via a real launched Electron window (Playwright `_electron`): Splash→Login→Home→Settings (path validation)→Updating→Error→Retry, all screenshotted |
 | LN-009 | Path traversal protection | Reject/normalize any manifest file path that escapes the client install dir (plan §18) | `launcher/src/main/UpdateManager.ts` (`resolveSafeInstallPath`) | LN-005 | DONE | Unit tests: `../../x` and absolute paths rejected before any disk write or network call |
-| BE-007 | Client file storage/serving | Backend doesn't serve actual file bytes yet — only manifest metadata (path/size/sha256). `UpdateManager`'s downloader is generic (works against any base URL) but there's nothing real to point it at in production yet. | `backend/` (new) | BE-006 | TODO | New — see ADR-008 |
+| BE-007 | Client file storage/serving | Real local file storage + `GET /api/v1/client/files/:channel/*` (Range support, manifest-membership check, shared `resolveSafePath` traversal guard) + a `publishBuild` pipeline tying manifest generation, file storage, and DB rows together (`backend/src/services/publish.ts`, `backend/src/publish-cli.ts`) | `backend/src/routes/clientFiles.ts`, `backend/src/services/publish.ts` | BE-006 | DONE — see ADR-011 | Integration tests: serves real bytes, honors `Range` (206/416), rejects unpublished/traversal paths; `publishBuild` tests verify DB rows + copied files + idempotent republish; manual run: launcher's "Check for updates" now reaches `complete` and the downloaded file matches byte-for-byte |
 
 ---
 
@@ -106,6 +106,19 @@ broken into tasks here once Phase 1–2 land.
   via a Playwright driver, screenshotted at each step. That pass also found
   and fixed a real Electron/Node ESM interop bug — see
   [ADR-009](architecture/decisions.md#adr-009-launcher-verification-pass-found-and-fixed-a-real-electronesm-bug-plus-a-missing-clientpath-wiring-gap).
-- Next actionable work, pending user go-ahead, is Phase 3 (`CL-000`,
-  blocked on a user decision about CitizenFX source) or `BE-007` (real file
-  storage/serving), since both are now the only non-blocked gaps left.
+- `BE-007` (real file storage/serving) is now done — see
+  [ADR-011](architecture/decisions.md#adr-011-be-007--real-client-file-storageserving-and-a-publish-pipeline).
+  Its own verification pass (independent code review) found and fixed 2
+  real regressions (a stale `baseDownloadUrl` after `apiBaseUrl` changes;
+  unencoded special characters in download URLs — both dead code paths
+  before this task made the download path live) plus 4 hardening fixes —
+  see [ADR-012](architecture/decisions.md#adr-012-be-007-verification-pass--2-real-regressions-4-hardening-fixes).
+  78 tests total across the repo (`npm test` from root), re-verified live
+  against the real running backend + launcher.
+- Next actionable work is Phase 3 (`CL-000`), still blocked on a user
+  decision about CitizenFX source — that decision has been deferred twice
+  now (see prior Notes entries and the "Not ready" answer in the Phase 3
+  planning discussion). No other non-blocked backend/launcher gaps remain
+  in `docs/plan.md`; further work here is either Phase 3, or Phase 4+
+  items (production security hardening, CI/CD, packaging — plan §7, §21,
+  §23 Phase 7–9) not yet broken into tasks.

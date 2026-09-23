@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { mapWithConcurrencyLimit } from "./concurrency.js";
 import type { Manifest, ManifestFile } from "./types.js";
 
 // Caps concurrently open file handles/read streams so generation doesn't hit
@@ -64,28 +65,6 @@ async function collectFiles(
       out.push(absPath);
     }
   }
-}
-
-async function mapWithConcurrencyLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let nextIndex = 0;
-
-  async function worker(): Promise<void> {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      results[index] = await fn(items[index]);
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
-  );
-  return results;
 }
 
 export async function generateManifest(

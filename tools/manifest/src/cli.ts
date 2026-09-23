@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
+import { parseFlags, parseIntFlag, requireFlag } from "./cliArgs.js";
 import { generateManifest } from "./generate.js";
+
+const USAGE =
+  "Usage: mzzplork-manifest --input <dir> --output <manifest.json> " +
+  "--channel <channel> --version <version> --build <buildNumber>";
 
 interface CliArgs {
   input: string;
@@ -11,38 +16,12 @@ interface CliArgs {
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const flags = new Map<string, string>();
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      const value = argv[i + 1];
-      if (value === undefined || value.startsWith("--")) {
-        throw new Error(`Missing value for --${key}`);
-      }
-      flags.set(key, value);
-      i += 1;
-    }
-  }
-
-  const input = flags.get("input");
-  const output = flags.get("output");
-  const channel = flags.get("channel");
-  const version = flags.get("version");
-  const buildRaw = flags.get("build");
-
-  if (!input || !output || !channel || !version || !buildRaw) {
-    throw new Error(
-      "Usage: mzzplork-manifest --input <dir> --output <manifest.json> " +
-        "--channel <channel> --version <version> --build <buildNumber>",
-    );
-  }
-
-  const build = Number.parseInt(buildRaw, 10);
-  if (!Number.isInteger(build)) {
-    throw new Error(`--build must be an integer, got "${buildRaw}"`);
-  }
-
+  const flags = parseFlags(argv);
+  const input = requireFlag(flags, "input", USAGE);
+  const output = requireFlag(flags, "output", USAGE);
+  const channel = requireFlag(flags, "channel", USAGE);
+  const version = requireFlag(flags, "version", USAGE);
+  const build = parseIntFlag(requireFlag(flags, "build", USAGE), "build");
   return { input, output, channel, version, build };
 }
 

@@ -5,12 +5,15 @@ import { config } from "./config.js";
 import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { clientRoutes } from "./routes/client.js";
+import { clientFilesRoutes } from "./routes/clientFiles.js";
 import { launcherRoutes } from "./routes/launcher.js";
 import { serverStatusRoutes } from "./routes/serverStatus.js";
 
 export interface BuildAppOptions {
   prisma: PrismaClient;
   logger?: boolean;
+  /** Defaults to `config.storageRoot`; overridable so tests can use an isolated temp directory. */
+  storageRoot?: string;
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
@@ -27,6 +30,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
 
   app.decorate("prisma", options.prisma);
+  app.decorate("storageRoot", options.storageRoot ?? config.storageRoot);
 
   await app.register(rateLimit, {
     global: true,
@@ -40,6 +44,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     async (v1) => {
       await v1.register(authRoutes);
       await v1.register(clientRoutes);
+      await v1.register(clientFilesRoutes);
       await v1.register(launcherRoutes);
       await v1.register(serverStatusRoutes);
     },

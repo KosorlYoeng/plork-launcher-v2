@@ -1,4 +1,12 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 const isProduction = process.env.NODE_ENV === "production";
+// Absolute by construction (relative to this file, not process.cwd() or
+// schema.prisma's directory) — deliberately avoids the same
+// relative-path-resolves-somewhere-unexpected footgun DATABASE_URL hit
+// (see ADR-010).
+const backendRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function requireEnv(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
@@ -22,6 +30,7 @@ export const config = {
   // own directory (backend/prisma/), not the backend/ root — "file:./dev.db"
   // here means backend/prisma/dev.db, not backend/dev.db.
   databaseUrl: requireEnvStrictInProduction("DATABASE_URL", "file:./dev.db"),
+  storageRoot: process.env.STORAGE_ROOT ?? join(backendRoot, "storage"),
   jwtSecret: requireEnvStrictInProduction("JWT_SECRET", "dev-only-insecure-secret"),
   accessTokenTtlSeconds: Number.parseInt(
     process.env.ACCESS_TOKEN_TTL_SECONDS ?? String(15 * 60),

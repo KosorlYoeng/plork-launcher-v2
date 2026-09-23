@@ -12,12 +12,14 @@ const backendRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 export interface TestContext {
   app: FastifyInstance;
   prisma: PrismaClient;
+  storageRoot: string;
   cleanup: () => Promise<void>;
 }
 
 export async function createTestApp(): Promise<TestContext> {
   const dir = mkdtempSync(join(tmpdir(), "mzzplork-backend-test-"));
   const databaseUrl = `file:${join(dir, "test.db")}`;
+  const storageRoot = join(dir, "storage");
 
   execSync("npx prisma db push --skip-generate --schema=prisma/schema.prisma", {
     cwd: backendRoot,
@@ -26,12 +28,13 @@ export async function createTestApp(): Promise<TestContext> {
   });
 
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
-  const app = await buildApp({ prisma, logger: false });
+  const app = await buildApp({ prisma, logger: false, storageRoot });
   await app.ready();
 
   return {
     app,
     prisma,
+    storageRoot,
     cleanup: async () => {
       await app.close();
       await prisma.$disconnect();

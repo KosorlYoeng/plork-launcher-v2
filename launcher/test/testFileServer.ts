@@ -15,7 +15,10 @@ export function startTestFileServer(files: Map<string, Buffer>): Promise<TestFil
   const requests: { path: string; range: string | null }[] = [];
 
   const server: Server = createServer((req: IncomingMessage, res) => {
-    const path = (req.url ?? "").replace(/^\//, "");
+    // Decode percent-encoding (UpdateManager encodes each path segment —
+    // see encodeManifestPath in UpdateManager.ts) so lookups match the
+    // original, unencoded keys in `files`.
+    const path = decodeURIComponent((req.url ?? "").replace(/^\//, ""));
     const range = req.headers.range ?? null;
     requests.push({ path, range });
 

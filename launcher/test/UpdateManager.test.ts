@@ -209,4 +209,22 @@ describe("UpdateManager", () => {
     await expect(manager.update("stable")).rejects.toThrow(PathTraversalError);
     expect(server.requests).toEqual([]);
   });
+
+  it("downloads a file whose path contains characters that are special in URLs (#, ?, %)", async () => {
+    installDir = await mkdtemp(join(tmpdir(), "mzzplork-update-special-chars-"));
+    const content = Buffer.from("content for a tricky filename");
+    const trickyPath = "notes/changelog#2 (draft)?.txt";
+    server = await startTestFileServer(new Map([[`stable/${trickyPath}`, content]]));
+
+    const manifest = manifestFor([{ path: trickyPath, content }]);
+    const manager = new UpdateManager(fakeApiClient(manifest), {
+      installDir,
+      baseDownloadUrl: server.url,
+    });
+
+    await manager.update("stable");
+
+    const written = await readFile(join(installDir, trickyPath));
+    expect(written).toEqual(content);
+  });
 });

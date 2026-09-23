@@ -44,6 +44,16 @@ npm test                     # vitest run — integration tests (spins up a temp
 Default port is `3000` (override with `PORT`). Config is entirely
 env-driven — see `backend/.env.example` — nothing is hardcoded.
 
+To publish a real build so the launcher can actually download it (BE-007):
+
+```sh
+npm run publish-build -- --dir <buildOutputDir> --channel stable --version 0.1.0 --build 101
+```
+
+Files land under `backend/storage/<channel>/` (gitignored;
+override the root with `STORAGE_ROOT`, an absolute path) and are served at
+`GET /api/v1/client/files/:channel/*`.
+
 ## Manifest generator (`tools/manifest/`)
 
 ```sh

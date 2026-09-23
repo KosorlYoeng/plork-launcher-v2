@@ -4,6 +4,118 @@ ADR-style log per plan §24. Newest first.
 
 ---
 
+## ADR-012: BE-007 verification pass — 2 real regressions, 4 hardening fixes
+
+**Context**: independent code review (`/code-review --level high`, 3
+verification agents) of the BE-007 diff before calling it done.
+
+**Confirmed real regressions, fixed**:
+1. `LauncherState`'s `baseDownloadUrl` was computed once in
+   `main/index.ts` at startup and handed to `LauncherState` as a fixed
+   value. Changing `apiBaseUrl` later via `updateConfig` correctly rebuilt
+   `apiClient` but left downloads silently targeting the *old* backend.
+   Fixed: `baseDownloadUrlOverride` (only for the explicit env-var case)
+   replaces the precomputed value; `checkForUpdates` now derives the
+   default (`${apiBaseUrl}/api/v1/client/files`) fresh from the *current*
+   config on every call. Regression test: constructs `LauncherState` with
+   a deliberately-broken `apiBaseUrl`, calls `updateConfig` to a real
+   local server, and asserts the download actually reaches it.
+2. `UpdateManager` concatenated `file.path` into the download URL with no
+   encoding. A manifest entry like `"changelog#2.txt"` gets silently
+   truncated at `#` by the WHATWG URL parser (confirmed with `new URL()`
+   directly) — dead code path before BE-007, since `baseDownloadUrl`
+   pointed at a nonexistent placeholder; live now. Fixed with
+   `encodeManifestPath` (encodes each `/`-separated segment, never the
+   separator itself). Regression test downloads a file with `#`, `?`, and
+   a space in its name.
+
+**Hardening, not regressions** (nothing was broken before BE-007 existed,
+but worth doing since this route is now real and publicly reachable):
+3. The file-serving route's `Range` parser only matched open-ended
+   `bytes=N-` (the only form our own launcher sends). Extended to the full
+   RFC 7233 grammar — bounded (`bytes=N-M`) and suffix (`bytes=-N`) — for
+   any other client (`curl -r`, a browser resuming a download) that might
+   hit this route.
+4. Added a `channel` route-param format check
+   (`/^[a-zA-Z0-9_-]+$/`) before it's ever joined into a storage path —
+   currently unreachable in practice (a non-matching channel just 404s at
+   the manifest lookup first), but defense-in-depth against a future code
+   path that constructs this join differently.
+5. `publishBuild` copied files one at a time; a real client build (hundreds/
+   thousands of files) would serialize on I/O latency. Extracted the
+   concurrency limiter `tools/manifest`'s hashing already used
+   (`mapWithConcurrencyLimit`, now itself shared) and applied it to the
+   copy step too.
+6. `backend/src/publish-cli.ts`'s flag parser was a near-verbatim copy of
+   `tools/manifest/src/cli.ts`'s. Extracted the shared parts
+   (`parseFlags`/`requireFlag`/`parseIntFlag`) into `tools/manifest`, so a
+   future fix to flag-parsing behavior doesn't need to land in two places.
+
+**Not fixed (considered, rejected)**: caching the per-channel manifest
+lookup in the file-serving route to avoid a repeated DB query per
+downloaded file. Rejected — the feature has no real traffic yet, and a
+cache needs an invalidation story (a mid-download republish could then
+serve stale membership checks) that isn't worth building speculatively.
+
+**Consequences**: launcher went from 39 → 41 tests, `tools/manifest` grew
+three new small modules (`concurrency.ts`, `cliArgs.ts`, already-existing
+`paths.ts`) that are now shared by both `backend` and `launcher` — this is
+becoming the natural home for anything both sides need identical behavior
+for, not just manifest generation. 78 tests total, all real (no new
+mocks), full rebuild clean, re-verified live against the running app.
+
+---
+
+## ADR-011: BE-007 — real client file storage/serving, and a publish pipeline
+
+**Context**: ADR-008 deliberately left `UpdateManager`'s download target
+generic since the backend never served real file bytes. The user chose to
+build that now rather than start Phase 3 (still blocked on a CitizenFX
+source decision).
+
+**Built**:
+- `backend/storage/<channel>/<file.path>` — local file storage, gitignored.
+- `GET /api/v1/client/files/:channel/*` — serves a file only if it's
+  actually listed in that channel's current manifest (not just "exists on
+  disk," extra defense against stray leftover files), validated with the
+  same `resolveSafePath` traversal guard the launcher already used —
+  moved into `tools/manifest` (a package both `backend` and `launcher`
+  already depend on) rather than reimplemented, so the security-critical
+  check has one implementation, not two. Supports `Range` requests (206/
+  416), since `UpdateManager`'s resume logic depends on it.
+- `publishBuild()` (`backend/src/services/publish.ts`) — the previously
+  undefined "Manifest Generator → Publish manifest" step: generates a
+  manifest via `@mzzplork/manifest`, copies the listed files into storage,
+  upserts the `ManifestVersion`/`ClientVersion` rows. Idempotent — a
+  changed republish of the same channel/version/build updates in place.
+  `backend/prisma/seed.ts` now goes through this instead of hand-inserting
+  a `sha256`/`size` pair that never corresponded to a real file.
+- Launcher's default `baseDownloadUrl` now derives from `apiBaseUrl`
+  (`${apiBaseUrl}/api/v1/client/files`) instead of a placeholder domain —
+  pointing the launcher at a real backend makes updates work with no
+  second URL to configure.
+
+**A design mistake caught before it shipped**: the file-serving route
+initially read a module-level `config.storageRoot` singleton directly,
+the same way early route files import `config` elsewhere in this backend.
+Writing its integration test surfaced the problem immediately — tests
+would have read/written the *real* `backend/storage/` directory instead of
+an isolated one, unlike `prisma`, which was already injected via
+`app.decorate` for exactly this reason. Fixed by decorating
+`app.storageRoot` the same way, sourced from `BuildAppOptions.storageRoot`
+(defaulting to `config.storageRoot`) — `backend/test/testApp.ts` now hands
+every test its own temp storage directory alongside its temp database.
+
+**Verified for real, not just by tests**: republished the demo seed data
+through the new pipeline, restarted the real backend and launcher, and
+drove the actual app through login → settings → "Check for updates" —
+which now reaches `complete` (previously always ended in the documented
+`fetch failed` error). Confirmed on disk: the downloaded file's bytes
+match the source exactly, and no stray `.tmp` file was left behind
+(clean atomic rename).
+
+---
+
 ## ADR-010: Fixed a relative-sqlite-path footgun that made `dev.db` silently resolve to the wrong file
 
 **Context**: while manually running the launcher against a locally-started

@@ -1,14 +1,24 @@
 import { createWriteStream } from "node:fs";
 import { mkdir, rename, rm, stat } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
+import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { pipeline } from "node:stream/promises";
-import { hashFile, type Manifest, type ManifestFile } from "@mzzplork/manifest";
+import { hashFile, resolveSafePath, type Manifest, type ManifestFile } from "@mzzplork/manifest";
 import type { ApiClient } from "./ApiClient.js";
 import type { UpdateProgressEvent } from "../shared/types.js";
 
-export class PathTraversalError extends Error {}
+// Re-exported under this module's existing names — the path-traversal
+// check (plan §18, LN-009) is shared with the backend's file-serving route
+// (BE-007), which needs the identical guard; see tools/manifest/src/paths.ts.
+// Nothing in the running app currently needs PathTraversalError by name
+// (only UpdateManager.test.ts does, via source, not the built bundle), so
+// electron-vite's app bundle correctly tree-shakes it out of
+// out/main/index.cjs — that's expected, not a bug. Kept as a direct
+// re-export anyway, since that's the correct form regardless.
+export { PathTraversalError } from "@mzzplork/manifest";
+export const resolveSafeInstallPath = resolveSafePath;
+
 export class DownloadVerificationError extends Error {}
 
 export interface UpdateManagerOptions {
@@ -25,19 +35,13 @@ export interface FileDiff {
 }
 
 /**
- * Resolves a manifest-listed relative path against `installDir`, rejecting
- * any path that would escape it (`../../x`, an absolute path, etc). Never
- * trust a remote manifest's paths without this check (plan §18, `LN-009`).
+ * Percent-encodes each path segment individually (never the `/`
+ * separators) so a manifest-listed path containing characters like `#`,
+ * `?`, or a bare `%` doesn't get misparsed as a URL fragment/query string
+ * or rejected as an invalid escape when concatenated into a download URL.
  */
-export function resolveSafeInstallPath(installDir: string, relativePath: string): string {
-  const resolvedRoot = resolve(installDir);
-  const resolvedTarget = resolve(resolvedRoot, relativePath);
-  if (resolvedTarget !== resolvedRoot && !resolvedTarget.startsWith(resolvedRoot + sep)) {
-    throw new PathTraversalError(
-      `Manifest file path escapes the install directory: "${relativePath}"`,
-    );
-  }
-  return resolvedTarget;
+function encodeManifestPath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
 }
 
 /**
@@ -211,7 +215,7 @@ export class UpdateManager {
 
       for (const file of toDownload) {
         const destPath = resolveSafeInstallPath(this.options.installDir, file.path);
-        const url = `${this.options.baseDownloadUrl}/${channel}/${file.path}`;
+        const url = `${this.options.baseDownloadUrl}/${encodeURIComponent(channel)}/${encodeManifestPath(file.path)}`;
 
         onProgress?.({
           status: "downloading",

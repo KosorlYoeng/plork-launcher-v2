@@ -9,8 +9,15 @@ export interface LauncherStateDeps {
   configStore: ConfigStore;
   secureStorage: SecureStorage;
   gameDetector: GameDetector;
-  /** Base URL manifest files are downloaded from — see the Phase 2 plan's documented backend gap (BE-007). */
-  baseDownloadUrl: string;
+  /**
+   * Explicit override for where manifest files are downloaded from
+   * (`MZZPLORK_BASE_DOWNLOAD_URL`). When unset, `checkForUpdates` derives
+   * it fresh from the *current* `apiBaseUrl` on every call — it must not
+   * be captured once at startup, since `apiBaseUrl` can change later via
+   * `updateConfig` and a stale download URL would then silently keep
+   * hitting the old backend.
+   */
+  baseDownloadUrlOverride?: string;
   /**
    * Where the MzzPlork client itself gets installed — distinct from
    * `gamePath` (the GTA V install, owned by Steam/Epic/Rockstar). Used as
@@ -110,9 +117,11 @@ export class LauncherState {
     if (!config.clientPath) {
       throw new Error("No client install path configured — detect or select a GTA V install first");
     }
+    const baseDownloadUrl =
+      this.deps.baseDownloadUrlOverride ?? `${config.apiBaseUrl}/api/v1/client/files`;
     const updateManager = new UpdateManager(this.apiClient, {
       installDir: config.clientPath,
-      baseDownloadUrl: this.deps.baseDownloadUrl,
+      baseDownloadUrl,
     });
     return updateManager.update(config.channel, onProgress);
   }

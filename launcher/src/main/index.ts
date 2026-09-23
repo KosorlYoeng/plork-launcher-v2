@@ -12,12 +12,6 @@ import { LauncherState } from "./state.js";
 import { registerIpcHandlers } from "./ipc.js";
 import { createDefaultGameDetectionStrategies } from "./detectionDefaults.js";
 
-// Documented gap: the Phase 1 backend doesn't serve file bytes yet (see
-// docs/plan.md task BE-007) — this points at wherever a real deployment
-// hosts client files, configurable via env rather than hardcoded (plan §15).
-const DEFAULT_BASE_DOWNLOAD_URL =
-  process.env.MZZPLORK_BASE_DOWNLOAD_URL ?? "https://cdn.mzzplork.example.com/client";
-
 async function createWindow(): Promise<void> {
   const configStore = new ConfigStore(join(app.getPath("userData"), "config.json"));
   const config = await configStore.load();
@@ -28,12 +22,17 @@ async function createWindow(): Promise<void> {
   );
   const gameDetector = new GameDetector(createDefaultGameDetectionStrategies());
 
+  // The backend now serves client files itself (BE-007:
+  // GET /api/v1/client/files/:channel/*), so by default LauncherState
+  // derives the download URL from the *current* apiBaseUrl on every call
+  // (see LauncherStateDeps.baseDownloadUrlOverride) — no separate CDN URL
+  // needed unless this env var overrides it.
   const state = new LauncherState(
     {
       configStore,
       secureStorage,
       gameDetector,
-      baseDownloadUrl: DEFAULT_BASE_DOWNLOAD_URL,
+      baseDownloadUrlOverride: process.env.MZZPLORK_BASE_DOWNLOAD_URL,
       defaultClientDir: join(app.getPath("userData"), "client"),
     },
     config,

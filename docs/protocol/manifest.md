@@ -37,19 +37,30 @@ uses to decide what to download (plan §9). It is produced by
 `files` is always sorted by `path` ascending, so two generator runs over
 identical input produce byte-identical manifest JSON.
 
-## Generation workflow
+## Generation & publishing workflow
 
 ```
 Build output directory
       ↓
-tools/manifest generate  (walks dir, hashes every file)
+publishBuild()  (backend/src/services/publish.ts)
+      ↓  — calls tools/manifest's generateManifest (walks dir, hashes every file)
       ↓
-manifest.json
+manifest.json  +  files copied into backend/storage/<channel>/
       ↓
-published via the backend (ManifestVersion + ClientVersion rows)
+ManifestVersion + ClientVersion rows upserted (idempotent republish)
+      ↓
+served at GET /api/v1/client/manifest and GET /api/v1/client/files/:channel/*
 ```
 
-CLI:
+CLI (BE-007):
+
+```sh
+cd backend
+npm run publish-build -- --dir <buildOutputDir> --channel stable --version 0.1.0 --build 100
+```
+
+The manifest generator itself (`tools/manifest`) can also be run standalone
+if you just want a `manifest.json` without publishing it anywhere:
 
 ```sh
 npx tsx tools/manifest/src/cli.ts \
@@ -64,7 +75,7 @@ The generator refuses to follow a symlink that resolves outside the input
 directory, so a manifest can never be generated from content living outside
 the intended build output tree.
 
-## Consumption workflow (launcher — Phase 2, not yet implemented)
+## Consumption workflow (launcher)
 
 ```
 Download manifest
@@ -81,7 +92,8 @@ Before writing: reject any `path` that escapes the client install
 directory (reject `..` segments / absolute paths) — plan §18
 ```
 
-This consumer-side validation is tracked as `LN-005`/`LN-009` in
-`docs/plan.md` and has not been implemented yet — the generator's symlink
-guard is a separate, generation-time protection and does not substitute for
-it.
+Implemented in `launcher/src/main/UpdateManager.ts` — see
+[update.md](update.md) for the full flow, and `resolveSafePath` in
+`tools/manifest/src/paths.ts` for the traversal guard, shared with the
+backend's file-serving route (BE-007) so both sides use one
+implementation, not two.

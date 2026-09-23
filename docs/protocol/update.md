@@ -45,12 +45,12 @@ channel (`src/shared/ipc.ts`) and rendered by `Updating.vue`.
 
 Each file is fetched from `${baseDownloadUrl}/${channel}/${file.path}`.
 `baseDownloadUrl` is configurable (`MZZPLORK_BASE_DOWNLOAD_URL` env var,
-plan §15 — never hardcoded) and defaults to a placeholder in this repo,
-since **there is no real file-hosting endpoint yet** — the Phase 1 backend
-only stores manifest metadata, not file bytes. This is tracked as
-`docs/plan.md` task `BE-007`. Until that exists, a real "check for updates"
-attempt fails with a real, visible error (verified manually — see
-[decisions.md ADR-009](../architecture/decisions.md)) rather than hanging.
+plan §15 — never hardcoded) and by default points at the backend's own
+`GET /api/v1/client/files/:channel/*` route (`${apiBaseUrl}/api/v1/client/files`)
+— see [manifest.md](manifest.md) for how files get published there in the
+first place, and [decisions.md ADR-011](../architecture/decisions.md) for
+how this was verified (a real "check for updates" run now reaches
+`complete`, not just a real error, as it did before `BE-007`).
 
 ## What is never done
 

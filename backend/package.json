@@ -12,13 +12,15 @@
     "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "publish-build": "tsx src/publish-cli.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "^10.1.1",
+    "@mzzplork/manifest": "*",
     "@prisma/client": "^5.21.1",
     "bcryptjs": "^2.4.3",
     "dotenv": "^18.0.3",
