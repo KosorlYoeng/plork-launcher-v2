@@ -21,7 +21,7 @@
     "@mzzplork/backend": "*",
     "@types/node": "^22.9.0",
     "@vitejs/plugin-vue": "^6.0.9",
-    "electron": "44.4.5",
+    "electron": "44.9.1",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "pinia": "^4.0.3",
